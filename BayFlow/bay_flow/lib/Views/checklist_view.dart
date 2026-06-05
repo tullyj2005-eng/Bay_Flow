@@ -19,16 +19,22 @@ class _ChecklistContent extends StatelessWidget {
   const _ChecklistContent();
 
   void _showAddJobSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Color(0xFF12151C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => _AddJobSheet(),
-    );
-  }
+  // grab the viewmodel before opening the sheet
+  final viewModel = context.read<ChecklistViewModel>();
+  
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Color(0xFF12151C),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) => ChangeNotifierProvider.value(
+      value: viewModel,
+      child: _AddJobSheet(), // ← pass it in
+      ), 
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -263,29 +269,29 @@ class _AddJobSheetState extends State<_AddJobSheet> {
   }
 
   Future<void> _save() async {
-    if (_customerController.text.trim().isEmpty ||
-        _vehicleController.text.trim().isEmpty ||
-        _jobTypeController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please fill in customer, vehicle and job type'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
-    await context.read<ChecklistViewModel>().addJob(
-      customerName: _customerController.text.trim(),
-      vehicle: _vehicleController.text.trim(),
-      jobType: _jobTypeController.text.trim(),
-      notes: _notesController.text.trim(),
+  if (_customerController.text.trim().isEmpty ||
+      _vehicleController.text.trim().isEmpty ||
+      _jobTypeController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Please fill in customer, vehicle and job type'),
+        backgroundColor: Color(0xFFEF4444),
+      ),
     );
-
-    if (mounted) Navigator.pop(context);
+    return;
   }
+
+  setState(() => _isSaving = true);
+
+  await context.read<ChecklistViewModel>().addJob( // ← use widget.viewModel instead of context.read
+    customerName: _customerController.text.trim(),
+    vehicle: _vehicleController.text.trim(),
+    jobType: _jobTypeController.text.trim(),
+    notes: _notesController.text.trim(),
+  );
+
+  if (mounted) Navigator.pop(context);
+}
 
   @override
   Widget build(BuildContext context) {
