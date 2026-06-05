@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:bay_flow/Models/bay.dart';
+import 'package:bay_flow/Models/job.dart';
 
 class HomePageViewModel extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   List<Bay> bays = [];
+  List<Job> queue = [];
   bool isLoading = true;
   String? shopId;
 
@@ -28,7 +30,6 @@ class HomePageViewModel extends ChangeNotifier {
       return;
     }
 
-    // look up shopId from userIndex
     final indexDoc = await _db.collection('userIndex').doc(uid).get();
     print('userIndex exists: ${indexDoc.exists}');
     print('userIndex data: ${indexDoc.data()}');
@@ -45,6 +46,7 @@ class HomePageViewModel extends ChangeNotifier {
 
     if (shopId != null) {
       fetchBays();
+      fetchQueue();
     } else {
       print('shopId is null in userIndex');
       isLoading = false;
@@ -52,6 +54,7 @@ class HomePageViewModel extends ChangeNotifier {
     }
   }
 
+  // ── FETCH BAYS ───────────────────────────────────────
   void fetchBays() {
     print('fetchBays called for shopId: $shopId');
     _db
@@ -71,5 +74,160 @@ class HomePageViewModel extends ChangeNotifier {
           isLoading = false;
           notifyListeners();
         });
+  }
+
+  // ── FETCH QUEUE ──────────────────────────────────────
+  void fetchQueue() {
+    _db
+        .collection('shops')
+        .doc(shopId)
+        .collection('jobs')
+        .where('status', isEqualTo: 'queued')
+        .orderBy('priority')
+        .snapshots()
+        .listen((snapshot) {
+          queue = snapshot.docs
+              .map((doc) => Job.fromMap(doc.data(), doc.id))
+              .toList();
+          notifyListeners();
+        }, onError: (error) {
+          print('Queue fetch error: $error');
+        });
+  }
+
+  // ── ADD BAY ──────────────────────────────────────────
+  Future<void> addBay({
+    required String bayName,
+    required String type,
+    required List<String> equipment,
+  }) async {
+    if (shopId == null) {
+      print('Cannot add bay: shopId is null');
+      return;
+    }
+
+    try {
+      final docRef = await _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('bays')
+          .add({
+            'bayName': bayName,
+            'type': type,
+            'equipment': equipment,
+            'status': 'available',
+            'assignedJobId': null,
+            'assignedTechId': null,
+            'assignedTechName': null,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+      print('Bay added with ID: ${docRef.id}');
+    } catch (e) {
+      print('Error adding bay: $e');
+    }
+  }
+
+  // ── ASSIGN JOB TO BAY ────────────────────────────────
+  Future<void> assignJob({
+    required String bayId,
+    required String jobId,
+    required String techId,
+    required String techName,
+  }) async {
+    if (shopId == null) return;
+
+    try {
+      final batch = _db.batch();
+
+      final bayRef = _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('bays')
+          .doc(bayId);
+      batch.update(bayRef, {
+        'status': 'in_progress',
+        'assignedJobId': jobId,
+        'assignedTechId': techId,
+        'assignedTechName': techName,
+        'startedAt': FieldValue.serverTimestamp(),
+      });
+
+      final jobRef = _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('jobs')
+          .doc(jobId);
+      batch.update(jobRef, {
+        'status': 'in_progress',
+        'assignedBayId': bayId,
+        'assignedTechId': techId,
+      });
+
+      final techRef = _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('users')
+          .doc(techId);
+      batch.update(techRef, {
+        'status': 'busy',
+        'assignedBayId': bayId,
+      });
+
+      await batch.commit();
+      print('Job assigned successfully');
+    } catch (e) {
+      print('Error assigning job: $e');
+    }
+  }
+
+  // ── MARK JOB DONE ────────────────────────────────────
+  Future<void> markJobDone({
+    required String bayId,
+    required String jobId,
+    required String techId,
+  }) async {
+    if (shopId == null) return;
+
+    try {
+      final batch = _db.batch();
+
+      final bayRef = _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('bays')
+          .doc(bayId);
+      batch.update(bayRef, {
+        'status': 'available',
+        'assignedJobId': null,
+        'assignedTechId': null,
+        'assignedTechName': null,
+        'startedAt': null,
+      });
+
+      final jobRef = _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('jobs')
+          .doc(jobId);
+      batch.update(jobRef, {
+        'status': 'done',
+        'completedAt': FieldValue.serverTimestamp(),
+      });
+
+      final techRef = _db
+          .collection('shops')
+          .doc(shopId)
+          .collection('users')
+          .doc(techId);
+      batch.update(techRef, {
+        'status': 'available',
+        'assignedBayId': null,
+      });
+
+      await batch.commit();
+      print('Job marked done');
+    } catch (e) {
+      print('Error marking job done: $e');
+    }
   }
 }
