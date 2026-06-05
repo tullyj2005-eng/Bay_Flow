@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "849884032639",
+    "project_id": "bayflow-3e482",
+    "storage_bucket": "bayflow-3e482.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:849884032639:android:f915dbf54bb4b96994194a",
+        "android_client_info": {
+          "package_name": "com.example.bay_flow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB28gpaxymbJiy9DOsfGqlysH1dSHF7joo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
